@@ -85,6 +85,20 @@ impl<'a, IO: ReadWriteSeek, TP, OCC> File<'a, IO, TP, OCC> {
         }
     }
 
+    // There should be only one clusters implementation needed!
+
+    #[cfg(feature = "std")]
+    pub(crate) fn clusters(&mut self) -> impl Iterator<Item = Result<u32, Error<IO::Error>>> + 'a {
+        let fs = self.fs;
+        let first = match self.first_cluster {
+            Some(f) => f,
+            None => return None.into_iter().flatten(),
+        };
+        Some(core::iter::once(Ok(first)).chain(fs.cluster_iter(first)))
+            .into_iter()
+            .flatten()
+    }
+
     /// Get the extents of a file on disk.
     ///
     /// This returns an iterator over the byte ranges on-disk occupied by

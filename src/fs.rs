@@ -4,7 +4,7 @@ use core::borrow::BorrowMut;
 use core::cell::{Cell, RefCell};
 use core::char;
 use core::cmp;
-use core::convert::TryFrom;
+use core::convert::{TryFrom, TryInto};
 use core::fmt::Debug;
 use core::marker::PhantomData;
 use core::u32;
@@ -19,6 +19,7 @@ use crate::table::{
     alloc_cluster, count_free_clusters, format_fat, read_fat_flags, ClusterIterator, RESERVED_FAT_ENTRIES,
 };
 use crate::time::{DefaultTimeProvider, TimeProvider};
+use crate::DirEntry;
 
 // FAT implementation based on:
 //   http://wiki.osdev.org/FAT
@@ -640,6 +641,66 @@ impl<IO: ReadWriteSeek, TP, OCC: OemCpConverter> FileSystem<IO, TP, OCC> {
     }
 }
 
+#[cfg(feature = "std")]
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Cluster {
+    Fat,
+    File(String),
+    Directory(String),
+    Free,
+}
+
+#[cfg(feature = "std")]
+fn iter_clusters<IO, TP, OCC, F>(
+    e: &mut DirEntry<IO, TP, OCC>,
+    path: &str,
+    to_cluster: F,
+    result: &mut [Cluster],
+) -> Result<(), Error<<IO as IoBase>::Error>>
+where
+    IO: ReadWriteSeek,
+    TP: TimeProvider,
+    OCC: OemCpConverter,
+    F: Fn(String) -> Cluster,
+{
+    let clusters = e.clusters();
+    for cluster in clusters {
+        match cluster {
+            Ok(cluster) => {
+                let cluster: usize = cluster.try_into().unwrap();
+                let file_name = format!("{}/{}", path, e.file_name());
+                result[cluster] = to_cluster(file_name);
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "std")]
+fn iter_dir<IO, TP, OCC>(
+    dir: &Dir<IO, TP, OCC>,
+    path: &str,
+    result: &mut [Cluster],
+) -> Result<(), Error<<IO as IoBase>::Error>>
+where
+    IO: ReadWriteSeek,
+    TP: TimeProvider,
+    OCC: OemCpConverter,
+{
+    for r in dir.iter() {
+        let mut e = r?;
+        if e.is_file() {
+            iter_clusters(&mut e, path, Cluster::File, result)?;
+        }
+        if e.is_dir() && e.file_name() != "." && e.file_name() != ".." {
+            iter_clusters(&mut e, path, Cluster::Directory, result)?;
+            iter_dir(&e.to_dir(), &format!("{}/{}", path, e.file_name()), result)?;
+        }
+    }
+    Ok(())
+}
+
 impl<IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> FileSystem<IO, TP, OCC> {
     /// Returns a volume label from root directory as `String`.
     ///
@@ -679,6 +740,39 @@ impl<IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> FileSystem<IO, TP
     pub fn read_volume_label_from_root_dir_as_bytes(&self) -> Result<Option<[u8; SFN_SIZE]>, Error<IO::Error>> {
         let entry_opt = self.root_dir().find_volume_entry()?;
         Ok(entry_opt.map(|e| *e.raw_short_name()))
+    }
+
+    /// Returns usage of each cluster by iterating over every directory/file.
+    ///
+    /// # Errors
+    ///
+    /// `Error::Io` will be returned if the underlying storage object returned an I/O error.
+    ///
+    /// # Panics
+    ///
+    /// Will Panic is the total number of cluster cannot be converted into an `usize`
+    #[cfg(feature = "std")]
+    pub fn cluster_map(&self) -> Result<Vec<Cluster>, Error<IO::Error>> {
+        let mut result = vec![Cluster::Free; self.total_clusters.try_into().unwrap()];
+        // this is just guessed
+        result[0] = Cluster::Fat;
+        result[1] = Cluster::Fat;
+        result[2] = Cluster::Fat;
+        if self.fat_type == FatType::Fat32 {
+            let mut root = File::new(Some(self.bpb.root_dir_first_cluster), None, self);
+            let clusters = root.clusters();
+            for cluster in clusters {
+                match cluster {
+                    Ok(cluster) => {
+                        let cluster: usize = cluster.try_into().unwrap();
+                        result[cluster] = Cluster::Directory(String::new());
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+        }
+        iter_dir(&self.root_dir(), "", &mut result)?;
+        Ok(result)
     }
 }
 

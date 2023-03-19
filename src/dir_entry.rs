@@ -715,6 +715,19 @@ impl<'a, IO: ReadWriteSeek, TP, OCC: OemCpConverter> DirEntry<'a, IO, TP, OCC> {
 
         self.short_name.eq_ignore_case(name, &self.fs.options.oem_cp_converter)
     }
+
+    // There should be only one clusters implementation needed!
+    #[cfg(feature = "std")]
+    pub(crate) fn clusters(&mut self) -> impl Iterator<Item = Result<u32, Error<IO::Error>>> + 'a {
+        let fs = self.fs;
+        let first = match self.first_cluster() {
+            Some(f) => f,
+            None => return None.into_iter().flatten(),
+        };
+        Some(core::iter::once(Ok(first)).chain(fs.cluster_iter(first)))
+            .into_iter()
+            .flatten()
+    }
 }
 
 impl<IO: ReadWriteSeek, TP, OCC> fmt::Debug for DirEntry<'_, IO, TP, OCC> {
