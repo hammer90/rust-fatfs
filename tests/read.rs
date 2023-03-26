@@ -1,25 +1,14 @@
-use std::fs;
 use std::io::prelude::*;
 use std::io::SeekFrom;
 use std::str;
 
-use fatfs::{DefaultTimeProvider, FatType, FsOptions, LossyOemCpConverter, StdIoWrapper};
-use fscommon::BufStream;
+use fatfs::FatType;
+
+mod common;
+
+use common::*;
 
 const TEST_TEXT: &str = "Rust is cool!\n";
-const FAT12_IMG: &str = "resources/fat12.img";
-const FAT16_IMG: &str = "resources/fat16.img";
-const FAT32_IMG: &str = "resources/fat32.img";
-
-type FileSystem = fatfs::FileSystem<StdIoWrapper<BufStream<fs::File>>, DefaultTimeProvider, LossyOemCpConverter>;
-
-fn call_with_fs<F: Fn(FileSystem) -> ()>(f: F, filename: &str) {
-    let _ = env_logger::builder().is_test(true).try_init();
-    let file = fs::File::open(filename).unwrap();
-    let buf_file = BufStream::new(file);
-    let fs = FileSystem::new(buf_file, FsOptions::new()).unwrap();
-    f(fs);
-}
 
 fn test_root_dir(fs: FileSystem) {
     let root_dir = fs.root_dir();
@@ -35,17 +24,17 @@ fn test_root_dir(fs: FileSystem) {
 
 #[test]
 fn test_root_dir_fat12() {
-    call_with_fs(test_root_dir, FAT12_IMG)
+    call_with_fs(test_root_dir, FAT12_IMG, 1)
 }
 
 #[test]
 fn test_root_dir_fat16() {
-    call_with_fs(test_root_dir, FAT16_IMG)
+    call_with_fs(test_root_dir, FAT16_IMG, 1)
 }
 
 #[test]
 fn test_root_dir_fat32() {
-    call_with_fs(test_root_dir, FAT32_IMG)
+    call_with_fs(test_root_dir, FAT32_IMG, 1)
 }
 
 fn test_read_seek_short_file(fs: FileSystem) {
@@ -67,17 +56,17 @@ fn test_read_seek_short_file(fs: FileSystem) {
 
 #[test]
 fn test_read_seek_short_file_fat12() {
-    call_with_fs(test_read_seek_short_file, FAT12_IMG)
+    call_with_fs(test_read_seek_short_file, FAT12_IMG, 2)
 }
 
 #[test]
 fn test_read_seek_short_file_fat16() {
-    call_with_fs(test_read_seek_short_file, FAT16_IMG)
+    call_with_fs(test_read_seek_short_file, FAT16_IMG, 2)
 }
 
 #[test]
 fn test_read_seek_short_file_fat32() {
-    call_with_fs(test_read_seek_short_file, FAT32_IMG)
+    call_with_fs(test_read_seek_short_file, FAT32_IMG, 2)
 }
 
 fn test_read_long_file(fs: FileSystem) {
@@ -96,17 +85,17 @@ fn test_read_long_file(fs: FileSystem) {
 
 #[test]
 fn test_read_long_file_fat12() {
-    call_with_fs(test_read_long_file, FAT12_IMG)
+    call_with_fs(test_read_long_file, FAT12_IMG, 3)
 }
 
 #[test]
 fn test_read_long_file_fat16() {
-    call_with_fs(test_read_long_file, FAT16_IMG)
+    call_with_fs(test_read_long_file, FAT16_IMG, 3)
 }
 
 #[test]
 fn test_read_long_file_fat32() {
-    call_with_fs(test_read_long_file, FAT32_IMG)
+    call_with_fs(test_read_long_file, FAT32_IMG, 3)
 }
 
 fn test_get_dir_by_path(fs: FileSystem) {
@@ -132,17 +121,17 @@ fn test_get_dir_by_path(fs: FileSystem) {
 
 #[test]
 fn test_get_dir_by_path_fat12() {
-    call_with_fs(test_get_dir_by_path, FAT12_IMG)
+    call_with_fs(test_get_dir_by_path, FAT12_IMG, 4)
 }
 
 #[test]
 fn test_get_dir_by_path_fat16() {
-    call_with_fs(test_get_dir_by_path, FAT16_IMG)
+    call_with_fs(test_get_dir_by_path, FAT16_IMG, 4)
 }
 
 #[test]
 fn test_get_dir_by_path_fat32() {
-    call_with_fs(test_get_dir_by_path, FAT32_IMG)
+    call_with_fs(test_get_dir_by_path, FAT32_IMG, 4)
 }
 
 fn test_get_file_by_path(fs: FileSystem) {
@@ -172,17 +161,17 @@ fn test_get_file_by_path(fs: FileSystem) {
 
 #[test]
 fn test_get_file_by_path_fat12() {
-    call_with_fs(test_get_file_by_path, FAT12_IMG)
+    call_with_fs(test_get_file_by_path, FAT12_IMG, 5)
 }
 
 #[test]
 fn test_get_file_by_path_fat16() {
-    call_with_fs(test_get_file_by_path, FAT16_IMG)
+    call_with_fs(test_get_file_by_path, FAT16_IMG, 5)
 }
 
 #[test]
 fn test_get_file_by_path_fat32() {
-    call_with_fs(test_get_file_by_path, FAT32_IMG)
+    call_with_fs(test_get_file_by_path, FAT32_IMG, 5)
 }
 
 fn test_volume_metadata(fs: FileSystem, fat_type: FatType) {
@@ -194,17 +183,17 @@ fn test_volume_metadata(fs: FileSystem, fat_type: FatType) {
 
 #[test]
 fn test_volume_metadata_fat12() {
-    call_with_fs(|fs| test_volume_metadata(fs, FatType::Fat12), FAT12_IMG)
+    call_with_fs(|fs| test_volume_metadata(fs, FatType::Fat12), FAT12_IMG, 6)
 }
 
 #[test]
 fn test_volume_metadata_fat16() {
-    call_with_fs(|fs| test_volume_metadata(fs, FatType::Fat16), FAT16_IMG)
+    call_with_fs(|fs| test_volume_metadata(fs, FatType::Fat16), FAT16_IMG, 6)
 }
 
 #[test]
 fn test_volume_metadata_fat32() {
-    call_with_fs(|fs| test_volume_metadata(fs, FatType::Fat32), FAT32_IMG)
+    call_with_fs(|fs| test_volume_metadata(fs, FatType::Fat32), FAT32_IMG, 6)
 }
 
 fn test_status_flags(fs: FileSystem) {
@@ -215,17 +204,17 @@ fn test_status_flags(fs: FileSystem) {
 
 #[test]
 fn test_status_flags_fat12() {
-    call_with_fs(test_status_flags, FAT12_IMG)
+    call_with_fs(test_status_flags, FAT12_IMG, 7)
 }
 
 #[test]
 fn test_status_flags_fat16() {
-    call_with_fs(test_status_flags, FAT16_IMG)
+    call_with_fs(test_status_flags, FAT16_IMG, 7)
 }
 
 #[test]
 fn test_status_flags_fat32() {
-    call_with_fs(test_status_flags, FAT32_IMG)
+    call_with_fs(test_status_flags, FAT32_IMG, 7)
 }
 
 #[test]
@@ -238,6 +227,7 @@ fn test_stats_fat12() {
             assert_eq!(stats.free_clusters(), 1920);
         },
         FAT12_IMG,
+        8,
     )
 }
 
@@ -251,6 +241,7 @@ fn test_stats_fat16() {
             assert_eq!(stats.free_clusters(), 4892);
         },
         FAT16_IMG,
+        8,
     )
 }
 
@@ -264,6 +255,7 @@ fn test_stats_fat32() {
             assert_eq!(stats.free_clusters(), 66886);
         },
         FAT32_IMG,
+        8,
     )
 }
 
@@ -288,5 +280,6 @@ fn test_multi_thread() {
             }
         },
         FAT32_IMG,
+        8,
     )
 }
