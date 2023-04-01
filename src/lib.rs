@@ -72,6 +72,9 @@ mod io;
 mod table;
 mod time;
 
+#[cfg(feature = "std")]
+mod recovery;
+
 pub use crate::dir::*;
 pub use crate::dir_entry::*;
 pub use crate::error::*;
@@ -79,3 +82,6 @@ pub use crate::file::*;
 pub use crate::fs::*;
 pub use crate::io::*;
 pub use crate::time::*;
+
+#[cfg(feature = "std")]
+pub use crate::recovery::*;

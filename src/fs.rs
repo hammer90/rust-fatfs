@@ -21,6 +21,9 @@ use crate::table::{
 use crate::time::{DefaultTimeProvider, TimeProvider};
 use crate::DirEntry;
 
+#[cfg(feature = "std")]
+use crate::recovery::*;
+
 // FAT implementation based on:
 //   http://wiki.osdev.org/FAT
 //   https://www.win.tue.nl/~aeb/linux/fs/fat/fat-1.html
@@ -772,6 +775,57 @@ impl<IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> FileSystem<IO, TP
             }
         }
         iter_dir(&self.root_dir(), "", &mut result)?;
+        Ok(result)
+    }
+
+    #[cfg(feature = "std")]
+    pub fn recovery<F, S>(
+        &self,
+        mut factory: F,
+        start_cluster: u32,
+        end_cluster: u32,
+    ) -> Result<Vec<RecoveryFile<S>>, Error<IO::Error>>
+    where
+        F: RecoveryFactory<State = S>,
+        S: Recovery,
+    {
+        let mut result: Vec<RecoveryFile<S>> = vec![];
+        let mut open_files: Vec<RecoveryFile<S>> = vec![];
+        let mut disk = self.disk.borrow_mut();
+        let offset = self.offset_from_cluster(start_cluster);
+        disk.seek(SeekFrom::Start(offset))?;
+
+        for cluster in start_cluster..end_cluster {
+            let mut cluster_used = false;
+            let mut still_open_files: Vec<RecoveryFile<S>> = vec![];
+
+            let mut data = vec![0; self.bpb.cluster_size().try_into().unwrap()];
+            disk.read_exact(&mut data)?;
+            for mut file in open_files {
+                match file.cluster_belongs_to_file(cluster, &data) {
+                    ClusterBelongs::NotToFile => {
+                        still_open_files.push(file);
+                    }
+                    ClusterBelongs::IsEndOfFile => {
+                        cluster_used = true;
+                        result.push(file);
+                    }
+                    ClusterBelongs::ToFile => {
+                        cluster_used = true;
+                        still_open_files.push(file);
+                    }
+                }
+            }
+            if !cluster_used {
+                if let Some(state) = factory.is_start_of_file(&data) {
+                    println!("new file starting at cluster {}", cluster);
+                    still_open_files.push(RecoveryFile::new(state, cluster, data));
+                }
+            }
+            open_files = still_open_files;
+        }
+
+        result.append(&mut open_files);
         Ok(result)
     }
 }
